@@ -1,7 +1,7 @@
 name: Target - Evaluator
 
 on:
-  # Evaluate after the receiver workflow completes
+  # Evaluate after the receiver workflow completes (success OR failure)
   workflow_run:
     workflows: ["Target - Cross-Repo Receiver"]
     types: [completed]
@@ -10,10 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  evaluate-trigger:
-    if: github.event.workflow_run.conclusion == 'success'
+  evaluate-and-callback:
+    # Runs for every conclusion so we can report success AND failure back to source
     runs-on: ubuntu-latest
-    name: Evaluate Cross-Repo Trigger Result
+    name: Evaluate Result and Notify Source
 
     steps:
       - name: Print evaluation results
@@ -23,23 +23,48 @@ jobs:
           RUN_ID="${{ github.event.workflow_run.id }}"
           CONCLUSION="${{ github.event.workflow_run.conclusion }}"
           EVENT="${{ github.event.workflow_run.event }}"
-          CREATED="${{ github.event.workflow_run.created_at }}"
 
           echo "╔══════════════════════════════════════════╗"
           echo "║  Evaluator - Cross-Repo Trigger Result   ║"
           echo "╚══════════════════════════════════════════╝"
-          echo ""
           echo "Workflow Run: #${RUN_NUMBER}"
           echo "Run ID: ${RUN_ID}"
           echo "Conclusion: ${CONCLUSION}"
           echo "Trigger Event: ${EVENT}"
-          echo "Created: ${CREATED}"
           echo ""
-
           if [ "$CONCLUSION" = "success" ]; then
             echo "✅ Cross-repo trigger succeeded"
           else
             echo "⚠️  Cross-repo trigger had issues (conclusion: $CONCLUSION)"
           fi
-          echo ""
-          echo "To view logs: https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"
+
+      - name: Generate GitHub App token (scoped to the source repo)
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Token must be scoped to the SOURCE repo so we can dispatch the callback there
+          owner: ${{ github.repository_owner }}
+          repositories: github-app-source-trigger
+
+      - name: Send result callback to source repo
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const run = context.payload.workflow_run;
+            const response = await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: 'github-app-source-trigger',
+              event_type: 'cross-repo-result',
+              client_payload: {
+                conclusion: run.conclusion,
+                workflow_name: run.name,
+                run_number: run.run_number,
+                run_url: run.html_url,
+                target_repo: context.repo.owner + '/' + context.repo.repo,
+                reported_at: new Date().toISOString(),
+              },
+            });
+            core.info(`📤 Reported "${run.conclusion}" back to source repo (github-app-source-trigger)`);
