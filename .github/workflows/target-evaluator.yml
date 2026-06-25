@@ -1,0 +1,45 @@
+name: Target - Evaluator
+
+on:
+  # Evaluate after the receiver workflow completes
+  workflow_run:
+    workflows: ["Target - Cross-Repo Receiver"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-trigger:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    name: Evaluate Cross-Repo Trigger Result
+
+    steps:
+      - name: Print evaluation results
+        id: results
+        run: |
+          RUN_NUMBER="${{ github.event.workflow_run.run_number }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          EVENT="${{ github.event.workflow_run.event }}"
+          CREATED="${{ github.event.workflow_run.created_at }}"
+
+          echo "╔══════════════════════════════════════════╗"
+          echo "║  Evaluator - Cross-Repo Trigger Result   ║"
+          echo "╚══════════════════════════════════════════╝"
+          echo ""
+          echo "Workflow Run: #${RUN_NUMBER}"
+          echo "Run ID: ${RUN_ID}"
+          echo "Conclusion: ${CONCLUSION}"
+          echo "Trigger Event: ${EVENT}"
+          echo "Created: ${CREATED}"
+          echo ""
+
+          if [ "$CONCLUSION" = "success" ]; then
+            echo "✅ Cross-repo trigger succeeded"
+          else
+            echo "⚠️  Cross-repo trigger had issues (conclusion: $CONCLUSION)"
+          fi
+          echo ""
+          echo "To view logs: https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"

@@ -1,0 +1,70 @@
+name: Target - Cross-Repo Receiver
+
+on:
+  # Receive repository_dispatch events from source repo
+  repository_dispatch:
+    types: [cross-repo-trigger]
+
+  # Also allow manual trigger for comparison
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Manual trigger message'
+        required: false
+        default: 'Manual trigger'
+
+permissions:
+  contents: read
+
+jobs:
+  process-trigger:
+    runs-on: ubuntu-latest
+    name: Process Trigger
+
+    steps:
+      - name: Display trigger information
+        id: info
+        run: |
+          echo "╔══════════════════════════════════════════╗"
+          echo "║  Cross-Repo Trigger Received!            ║"
+          echo "╚══════════════════════════════════════════╝"
+          echo ""
+          echo "Trigger Type: ${{ github.event_name }}"
+
+      - name: Print client payload (safe object rendering)
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          echo "─── Client Payload ───"
+          echo "${{ toJSON(github.event.client_payload) }}"
+
+      - name: Process the trigger
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            MESSAGE="${{ github.event.client_payload.message }}"
+            SOURCE_REPO="${{ github.event.client_payload.source_repo }}"
+            SOURCE_REF="${{ github.event.client_payload.source_ref }}"
+            TRIGGERED_BY="${{ github.event.client_payload.triggered_by }}"
+            TIMESTAMP="${{ github.event.client_payload.timestamp }}"
+
+            echo "📨 Processing cross-repo trigger..."
+            echo "   Message: $MESSAGE"
+            echo "   Source: $SOURCE_REPO"
+            echo "   Ref: $SOURCE_REF"
+            echo "   Triggered by: $TRIGGERED_BY"
+            echo "   Time: $TIMESTAMP"
+
+            # Log to a temp file in the runner workspace (persists within the job)
+            echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | Triggered by: $TRIGGERED_BY | Message: $MESSAGE | Source: $SOURCE_REPO" > $RUNNER_TEMP/trigger-log.txt
+            echo "📝 Trigger info saved to temp log"
+          else
+            echo "📨 Processing manual trigger..."
+            echo "   Message: ${{ github.event.inputs.message }}"
+          fi
+
+      - name: Show results
+        if: success()
+        run: |
+          echo ""
+          echo "✅ Trigger processing completed successfully"
+          echo "📋 This job demonstrates processing a cross-repo trigger"
+          echo "   Replace these steps with your actual CI/CD logic"
