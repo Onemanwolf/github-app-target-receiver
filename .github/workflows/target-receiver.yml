@@ -69,10 +69,42 @@ jobs:
             echo "   Message: ${{ github.event.inputs.message }}"
           fi
 
+      - name: Resolve container name and write result
+        id: deploy
+        run: |
+          # Inputs sent down by the source trigger (defaults if absent)
+          CONTAINER_NAME="${{ github.event.client_payload.container_name }}"
+          IMAGE_TAG="${{ github.event.client_payload.image_tag }}"
+          [ -z "$CONTAINER_NAME" ] && CONTAINER_NAME="app"
+          [ -z "$IMAGE_TAG" ] && IMAGE_TAG="latest"
+
+          # "Deploy" — derive the resolved container name this run produced
+          DEPLOYED_CONTAINER="${CONTAINER_NAME}-${IMAGE_TAG}-run${{ github.run_number }}"
+          echo "🚀 Deployed container: $DEPLOYED_CONTAINER"
+
+          # Write a structured result the source will read back
+          cat > "$RUNNER_TEMP/result.json" <<EOF
+          {
+            "status": "deployed",
+            "container_name": "$DEPLOYED_CONTAINER",
+            "image_tag": "$IMAGE_TAG",
+            "receiver_run_id": ${{ github.run_id }},
+            "receiver_run_number": ${{ github.run_number }}
+          }
+          EOF
+          echo "container_name=$DEPLOYED_CONTAINER" >> "$GITHUB_OUTPUT"
+          echo "--- result.json ---"; cat "$RUNNER_TEMP/result.json"
+
+      - name: Upload result artifact (source downloads this)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-repo-result
+          path: ${{ runner.temp }}/result.json
+          retention-days: 1
+
       - name: Show results
         if: success()
         run: |
           echo ""
           echo "✅ Trigger processing completed successfully"
-          echo "📋 This job demonstrates processing a cross-repo trigger"
-          echo "   Replace these steps with your actual CI/CD logic"
+          echo "📦 Container produced: ${{ steps.deploy.outputs.container_name }}"
