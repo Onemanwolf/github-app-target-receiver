@@ -1,5 +1,13 @@
 name: Target - Cross-Repo Receiver
 
+# Stamp the run name with the correlation id (when present) so the synchronous
+# source workflow can find exactly this run while polling. Falls back to the
+# default name for the async path and manual triggers.
+run-name: >-
+  ${{ (github.event_name == 'repository_dispatch' && github.event.client_payload.correlation_id)
+      && format('Receiver · cid={0}', github.event.client_payload.correlation_id)
+      || 'Target - Cross-Repo Receiver' }}
+
 on:
   # Receive repository_dispatch events from source repo
   repository_dispatch:
